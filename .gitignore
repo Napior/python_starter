@@ -6,10 +6,10 @@ __pycache__/
 dist/
 build/
 
-# Virtual env — NIE commituj
+# Virtual env — do not commit
 .venv/
 
-# Env — NIGDY nie commituj
+# Env — never commit
 .env
 *.env.local
 
@@ -17,7 +17,12 @@ build/
 data/*.db
 data/cmdb.json
 
-# requirements.txt to lockfile — commituj go do repo
+# requirements.txt is the lockfile — commit it to the repo
+
+# Node / Vite
+node_modules/
+ui/dist/
+ui/.vite/
 
 # OS
 .DS_Store

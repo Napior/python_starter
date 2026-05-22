@@ -15,11 +15,11 @@ install-hooks:
 	@echo "Git hook installed."
 
 lint:
-	python -m flake8 src/ ui/
+	python -m flake8 src/
 
 format:
-	python -m isort src/ ui/
-	python -m black src/ ui/
+	python -m isort src/
+	python -m black src/
 
 typecheck:
 	python -m mypy src/

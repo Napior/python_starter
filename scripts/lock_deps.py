@@ -5,7 +5,7 @@ import sys
 import tempfile
 
 cfg = configparser.ConfigParser(delimiters=(':',), allow_no_value=True)
-cfg.optionxform = str  # zachowaj wielkość liter i >= w stringach requirementów
+cfg.optionxform = str  # preserve case and >= in requirement strings
 cfg.read('requirements.ini')
 
 reqs = [key for section in cfg.sections() for key in cfg.options(section)]
@@ -22,6 +22,6 @@ try:
     )
     with open('requirements.txt', 'w') as out:
         out.write(result.stdout)
-    print('requirements.txt zaktualizowany.')
+    print('requirements.txt updated.')
 finally:
     os.unlink(tmp)
