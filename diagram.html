@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Alert Correlation Service — Diagramy</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 1200px; margin: 40px auto; padding: 0 20px; background: #f9f9f9; }
+    h1 { color: #333; }
+    h2 { color: #555; margin-top: 48px; border-bottom: 2px solid #ddd; padding-bottom: 8px; }
+    .diagram-box { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 24px; margin: 16px 0; }
+    .mermaid { display: flex; justify-content: center; }
+  </style>
+</head>
+<body>
+  <h1>Alert Correlation Service — Architektura</h1>
+
+  <h2>1. Diagram komponentów</h2>
+  <div class="diagram-box">
+    <div class="mermaid">
+graph TB
+    subgraph MON["Systemy monitoringu"]
+        ZB[Zabbix]
+        SC[SCOM]
+        SP[Splunk]
+        PD[Pingdom]
+        M24[Monit24]
+    end
+
+    subgraph BK["Istniejący backend"]
+        BKS[Alert Backend + szyna zdarzeń]
+    end
+
+    subgraph SVC["Alert Correlation Service"]
+        SCHED[main.py\nAPScheduler co 5 min]
+        POLL[poller.py\nAlert Poller]
+        NORM[normalize.py\nNormalizacja + Dedup]
+        CMDB_M[cmdb.py\nCMDB Context]
+        LLM_C[llm_client.py\nLLM Client]
+        DB[db.py\nSQLite]
+    end
+
+    subgraph EXT["Zewnętrzne"]
+        LITELLM[LiteLLM Proxy\nOpenAI-compatible]
+        CMDB_F[cmdb.json\neksport CMDB]
+    end
+
+    UI[ui/app.py\nStreamlit UI]
+
+    ZB & SC & SP & PD & M24 --> BKS
+    BKS -->|"GET /alerts?since=&until="| POLL
+    SCHED -->|trigger| POLL
+    UI -->|on-demand trigger| POLL
+    POLL --> NORM
+    NORM --> LLM_C
+    CMDB_F -->|"load at startup"| CMDB_M
+    CMDB_M -->|"get_context(hosts)"| LLM_C
+    LLM_C -->|"POST /chat/completions"| LITELLM
+    LITELLM -->|JSON response| LLM_C
+    LLM_C --> DB
+    DB -->|historia analiz| UI
+    </div>
+  </div>
+
+  <h2>2. Diagram sekwencji — tryb automatyczny (scheduler)</h2>
+  <div class="diagram-box">
+    <div class="mermaid">
+sequenceDiagram
+    participant SCH as APScheduler
+    participant POL as poller.py
+    participant BK as Alert Backend
+    participant NRM as normalize.py
+    participant CMB as cmdb.py
+    participant LLM as llm_client.py
+    participant LTL as LiteLLM Proxy
+    participant DB as SQLite
+    participant UI as Streamlit UI
+
+    SCH->>POL: trigger co 5 min
+    POL->>DB: pobierz last_run_timestamp
+    DB-->>POL: timestamp T
+    POL->>BK: GET /alerts?since=T-30s&until=now
+    BK-->>POL: [alert, alert, ...]
+
+    alt batch pusty
+        POL->>DB: zapisz log skip
+    else batch niepusty
+        POL->>NRM: normalize(alerts)
+        Note over NRM: severity mapping<br/>dedup via hashlib<br/>sort po timestamp
+        NRM-->>POL: [normalized_alerts]
+        POL->>CMB: get_context(hosts)
+        CMB-->>POL: INFRASTRUCTURE CONTEXT string
+        POL->>LLM: analyze(alerts, cmdb_context)
+        LLM->>LTL: POST /chat/completions
+        LTL-->>LLM: JSON z incident_groups, root_cause
+        alt valid JSON
+            LLM->>DB: zapisz analysis + last_run_timestamp
+            DB-->>UI: nowa analiza przy odświeżeniu
+        else invalid JSON
+            LLM->>LTL: retry z fix the JSON
+            LTL-->>LLM: poprawiony JSON
+            LLM->>DB: zapisz analysis
+        end
+    end
+    </div>
+  </div>
+
+  <h2>3. Diagram sekwencji — tryb on-demand (operator)</h2>
+  <div class="diagram-box">
+    <div class="mermaid">
+sequenceDiagram
+    actor OP as Operator
+    participant UI as Streamlit UI
+    participant POL as poller.py
+    participant BK as Alert Backend
+    participant NRM as normalize.py
+    participant CMB as cmdb.py
+    participant LLM as llm_client.py
+    participant LTL as LiteLLM Proxy
+    participant DB as SQLite
+
+    OP->>UI: Analizuj teraz (okno: 2/5/10/15 min)
+    UI->>POL: poll(lookback_minutes=N)
+    POL->>BK: GET /alerts?since=now-N_min&until=now
+    BK-->>POL: [alert, alert, ...]
+    POL->>NRM: normalize(alerts)
+    NRM-->>POL: [normalized_alerts]
+    POL->>CMB: get_context(hosts)
+    CMB-->>POL: INFRASTRUCTURE CONTEXT string
+    POL->>LLM: analyze(alerts, cmdb_context)
+    LLM->>LTL: POST /chat/completions
+    LTL-->>LLM: JSON z incident_groups, root_cause
+    LLM->>DB: zapisz analysis
+    DB-->>UI: wynik analizy
+    UI-->>OP: incident groups + root cause + confidence + recommended_action
+    </div>
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+  </script>
+</body>
+</html>

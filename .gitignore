@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+
+# Virtual env — NIE commituj
+.venv/
+
+# Env — NIGDY nie commituj
+.env
+*.env.local
+
+# Data
+data/*.db
+data/cmdb.json
+
+# requirements.txt to lockfile — commituj go do repo
+
+# OS
+.DS_Store
