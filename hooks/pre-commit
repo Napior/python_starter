@@ -9,13 +9,13 @@ if [ ! -f "$PYTHON" ]; then
 fi
 
 echo ">>> isort --check-only"
-$PYTHON -m isort --check-only src/ tests/
+$PYTHON -m isort --check-only src/ ui/
 
 echo ">>> black --check"
-$PYTHON -m black --check src/ tests/
+$PYTHON -m black --check src/ ui/
 
 echo ">>> flake8"
-$PYTHON -m flake8 src/ tests/
+$PYTHON -m flake8 src/ ui/
 
 echo ">>> mypy"
 $PYTHON -m mypy src/

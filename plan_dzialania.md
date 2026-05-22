@@ -85,11 +85,11 @@ Skrypt trzymany w repo pod `hooks/pre-commit`, instalowany ręcznie raz na klon.
 
 ```bash
 # w katalogu projektu (analityka_praca/)
-mkdir -p src tests data ui scripts hooks
+mkdir -p src src/tests ui ui/tests data scripts hooks
 touch src/__init__.py
 touch src/normalize.py src/poller.py src/llm_client.py src/cmdb.py src/db.py src/main.py src/settings.py src/logging_config.py
 touch ui/__init__.py ui/app.py
-touch tests/__init__.py
+touch src/tests/__init__.py ui/tests/__init__.py
 touch data/.gitkeep
 touch scripts/lock_deps.py
 touch hooks/pre-commit
@@ -229,10 +229,10 @@ strict = False
 warn_unused_ignores = True
 warn_return_any = True
 ignore_missing_imports = True
-exclude = tests/|ui/
+exclude = src/tests/|ui/tests/
 
 [tool:pytest]
-testpaths = tests
+testpaths = src/tests ui/tests
 asyncio_mode = auto
 ```
 
@@ -420,7 +420,7 @@ Zasada: buduj od wnętrza na zewnątrz. Każdy krok ma działające testy zanim 
 
 ### Sprint 1: Fundament (dzień 1-2)
 
-**1. `src/normalize.py` + `tests/test_normalize.py`**
+**1. `src/normalize.py` + `src/tests/test_normalize.py`**
 
 Najłatwiejszy do testowania (pure functions, zero I/O, zero zależności od settings).
 Startujesz od razu z zielonym pytestem — natychmiastowy feedback i bez potrzeby `.env`.
@@ -434,7 +434,7 @@ def filter_for_prompt(alert: dict) -> dict: ...  # usuwa pola niepotrzebne LLM
 ```
 
 ```python
-# tests/test_normalize.py
+# src/tests/test_normalize.py
 def test_severity_mapping_zabbix():
     raw = {"source_system": "zabbix", "severity": "Disaster", ...}
     assert normalize_alert(raw)["severity"] == "critical"
@@ -457,7 +457,7 @@ python -c "from src.settings import settings; print(settings.model_dump())"
 
 Prosty plik. Zaimportuj w smoke teście, sprawdź że `setup_logging()` + `logger.info(...)` wypisuje na stdout w oczekiwanym formacie.
 
-**4. `src/db.py` + `tests/test_db.py`**
+**4. `src/db.py` + `src/tests/test_db.py`**
 
 SQLite nie wymaga mocków — testuj na `:memory:`.
 
@@ -470,7 +470,7 @@ def set_last_run_timestamp(session, ts: datetime) -> None: ...
 ```
 
 ```python
-# tests/test_db.py
+# src/tests/test_db.py
 def test_last_run_timestamp_roundtrip():
     engine = get_engine(":memory:")
     # create tables, session, set timestamp, pobierz i porównaj
@@ -478,12 +478,12 @@ def test_last_run_timestamp_roundtrip():
 
 ### Sprint 2: HTTP I/O (dzień 3-4)
 
-**5. `src/poller.py` + `tests/test_poller.py`**
+**5. `src/poller.py` + `src/tests/test_poller.py`**
 
 Pierwsze użycie `pytest-httpx`. Nigdy nie odpytuj prawdziwego backendu w testach.
 
 ```python
-# tests/test_poller.py
+# src/tests/test_poller.py
 from pytest_httpx import HTTPXMock
 
 def test_fetch_alerts_success(httpx_mock: HTTPXMock):
@@ -500,7 +500,7 @@ def test_fetch_alerts_backend_down(httpx_mock: HTTPXMock):
         fetch_alerts(...)
 ```
 
-**6. `src/cmdb.py` + `tests/test_cmdb.py`**
+**6. `src/cmdb.py` + `src/tests/test_cmdb.py`**
 
 ```python
 def test_get_context_known_hosts(tmp_path):
@@ -512,7 +512,7 @@ def test_get_context_known_hosts(tmp_path):
     assert "unknown-host" not in ctx
 ```
 
-**7. `src/llm_client.py` + `tests/test_llm_client.py`**
+**7. `src/llm_client.py` + `src/tests/test_llm_client.py`**
 
 Najtrudniejszy — testuj scenariusze błędów (invalid JSON, retry).
 
@@ -632,13 +632,13 @@ if [ ! -f "$PYTHON" ]; then
 fi
 
 echo ">>> isort --check-only"
-$PYTHON -m isort --check-only src/ tests/
+$PYTHON -m isort --check-only src/ ui/
 
 echo ">>> black --check"
-$PYTHON -m black --check src/ tests/
+$PYTHON -m black --check src/ ui/
 
 echo ">>> flake8"
-$PYTHON -m flake8 src/ tests/
+$PYTHON -m flake8 src/ ui/
 
 echo ">>> mypy"
 $PYTHON -m mypy src/
@@ -698,11 +698,11 @@ install-hooks:
 	@echo "Git hook installed."
 
 lint:
-	python -m flake8 src/ tests/
+	python -m flake8 src/ ui/
 
 format:
-	python -m isort src/ tests/
-	python -m black src/ tests/
+	python -m isort src/ ui/
+	python -m black src/ ui/
 
 typecheck:
 	python -m mypy src/
@@ -746,14 +746,14 @@ streamlit run ui/app.py
 
 # Testy
 python -m pytest                            # wszystkie
-python -m pytest tests/test_normalize.py   # jeden plik
+python -m pytest src/tests/test_normalize.py   # jeden plik
 python -m pytest -v -k "test_dedup"        # konkretny test
 python -m pytest --tb=short                # krótki traceback
 
 # Linting i formatting
-python -m flake8 src/ tests/               # sprawdź błędy
-python -m isort src/ tests/               # posortuj importy
-python -m black src/ tests/               # sformatuj kod
+python -m flake8 src/ ui/                  # sprawdź błędy
+python -m isort src/ ui/                  # posortuj importy
+python -m black src/ ui/                  # sformatuj kod
 
 # Type checking
 python -m mypy src/
