@@ -3,9 +3,9 @@
 Alert correlation service. An upstream alert backend collects events from monitoring
 systems (Zabbix, SCOM, Splunk, Pingdom, Monit24) off the event bus, normalizes them
 to a canonical JSON schema, maps severity to a single scale, and deduplicates them.
-events-analytics polls that backend's HTTP API, enriches each batch with CMDB context,
-sends it to a LiteLLM proxy for root-cause analysis, persists results to SQLite, and
-serves them to a React UI for operators.
+events-analytics polls that backend's HTTP API, sends it to a LiteLLM proxy for
+root-cause analysis, persists results to SQLite, and serves them to a React UI
+for operators.
 
 ---
 
@@ -36,9 +36,6 @@ serves them to a React UI for operators.
    │                                ├─→  poller             │
    │   FastAPI POST /analyze       ─┘      │                │
    │                                       ▼                │
-   │                              cmdb.get_context()        │
-   │                                       │                │
-   │                                       ▼                │
    │                              llm_client (httpx → LiteLLM proxy)
    │                                       │                │
    │                                       ▼                │
@@ -68,7 +65,6 @@ already carries a `repeat_count` from upstream.
 | Path                     | Role |
 |--------------------------|------|
 | `src/poller.py`          | `httpx` GET to backend `/api/alerts?since=&until=`; returns alert dicts. |
-| `src/cmdb.py`            | Load CMDB JSON at startup → `dict[hostname → metadata]`; `get_context(hosts) -> str` for prompt injection. |
 | `src/llm_client.py`      | `httpx` POST to the LiteLLM proxy; prompt assembly; JSON parsing with retry. |
 | `src/db.py`              | SQLAlchemy 2.0 models + session factory; stores analyses and `last_run_timestamp`. |
 | `src/scheduler.py`       | APScheduler `BackgroundScheduler`; wires the periodic `run_analysis_cycle` job. |
@@ -77,9 +73,6 @@ already carries a `repeat_count` from upstream.
 | `src/logging_config.py`  | `dictConfig`; structured stdout logs. |
 | `src/main.py`            | Entry point — wires logging, settings, DB, scheduler, FastAPI; starts uvicorn. |
 | `ui/`                    | React + TypeScript app. Calls the FastAPI service for analyses and the on-demand trigger. |
-
-CMDB stays as an in-process `dict` loaded from JSON. No vector store, no embeddings —
-hostname is the only lookup key needed.
 
 ---
 
@@ -113,7 +106,6 @@ src/
 ├── scheduler.py
 ├── poller.py
 ├── llm_client.py
-├── cmdb.py
 ├── db.py
 ├── settings.py
 ├── logging_config.py
@@ -125,7 +117,7 @@ ui/                     # React app — own package.json, build pipeline
 └── package.json
 scripts/lock_deps.py
 hooks/pre-commit
-data/                   # SQLite + CMDB JSON (gitignored)
+data/                   # SQLite (gitignored)
 ```
 
 ---
